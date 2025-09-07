@@ -1,20 +1,34 @@
+import os
 import datetime
 import random
+import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes
+)
 from telegram.constants import ChatMemberStatus
 
-# توکن ربات
-TOKEN = "8425551486:AAEHPG5ODp4NcoMSK7p7bSetf-EWF-1MDls"
+# --- تنظیمات لاگ (اختیاری ولی مفید برای دیباگ) ---
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# توکن ربات: از متغیر محیطی بخوان، در صورت نبود از مقدار پیش‌فرض استفاده می‌کنه
+TOKEN = os.getenv("BOT_TOKEN") or "8425551486:AAEHPG5ODp4NcoMSK7p7bSetf-EWF-1MDls"
 
 # تاریخ کنکور تجربی ۱۴۰۵ (۱۲ تیر ۱۴۰۵، ساعت ۸ صبح - معادل 3 July 2026 میلادی)
 KONKOOR_DATE = datetime.datetime(2026, 7, 3, 8, 0)
 
-# شناسه کانال و گروه (لطفاً با شناسه‌های عددی جایگزین کن)
-CHANNEL_ID = "@pershiiyan"  # مثل -1001234567890
+# شناسه کانال و گروه (در صورت نیاز، شناسه عددی با -100xxxx بذار)
+CHANNEL_ID = "@pershiiyan"        # مثل -1001234567890
 MUSIC_GROUP_ID = "@musicpershii"  # مثل -1009876543210
 
-# لیست نکات کنکوری (50 نکته)
+# لیست نکات کنکوری (همان 50 نکته)
 TIPS = [
     "📚 هر روز یه مبحث جدید مرور کن تا مطالب تثبیت بشن!",
     "⏰ زمانت رو مدیریت کن و برنامه‌ریزی دقیق داشته باش.",
@@ -68,7 +82,7 @@ TIPS = [
     "⭐ با یه برنامه منظم، کنکور رو به یه ماجراجویی تبدیل کن!"
 ]
 
-# لیست نمونه فایل‌های موزیک از @musicpershii (لطفاً با file_id واقعی جایگزین کن)
+# لیست نمونه فایل‌های موزیک (جایگزین کن با file_id واقعی)
 MUSIC_FILES = [
     {"title": "آهنگ غمگین ۱", "file_id": "SAMPLE_FILE_ID_1"},
     {"title": "آهنگ غمگین ۲", "file_id": "SAMPLE_FILE_ID_2"},
@@ -80,33 +94,39 @@ MUSIC_FILES = [
 # ذخیره تنظیمات نوتیفیکیشن کاربران (chat_id: list of frequencies)
 user_notifications = {}
 
+# --- توابع کمکی ---
 async def check_channel_membership(bot, user_id):
+    """
+    بررسی می‌کند کاربر عضو کانال شده یا نه.
+    بازگشت: (is_member: bool, error_message: Optional[str])
+    """
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-        print(f"User {user_id} status: {member.status}")  # برای دیباگ
+        logger.info(f"User {user_id} status: {member.status}")
         return member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER], None
     except Exception as e:
-        print(f"Error checking membership for user {user_id}: {e}")  # برای دیباگ
-        if "chat not found" in str(e).lower():
+        logger.exception(f"Error checking membership for user {user_id}: {e}")
+        msg = str(e).lower()
+        if "chat not found" in msg:
             return False, "ربات ادمین کانال نیست یا CHANNEL_ID اشتباهه!"
-        elif "user not found" in str(e).lower():
+        elif "user not found" in msg:
             return False, "شما در کانال عضو نیستید!"
         return False, f"خطای نامشخص: {e}"
 
+# --- هندلرها ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     bot = context.bot
     is_member, error_message = await check_channel_membership(bot, user_id)
     if not is_member:
         await update.message.reply_text(
-            f"🌟 برای استفاده از ربات، اول باید عضو کانال @pershiiyan بشی! ⭐\n"
-            f"لینک: https://t.me/pershiiyan\n"
+            f"🌟 برای استفاده از ربات، اول باید عضو کانال {CHANNEL_ID} بشی! ⭐\n"
+            f"لینک: https://t.me/{CHANNEL_ID.lstrip('@')}\n"
             f"دلیل خطا: {error_message}\n"
             f"بعد از عضویت، دوباره /start بزن."
         )
         return
 
-    # منوی تعاملی جذاب
     keyboard = [
         [InlineKeyboardButton("⏳ روزشمار کنکور", callback_data="countdown")],
         [InlineKeyboardButton("📖 نکته کنکوری", callback_data="tip")],
@@ -114,8 +134,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🔔 تنظیم نوتیفیکیشن", callback_data="set_notification")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    # پیام خوش‌آمدگویی انگیزشی
+
     await update.message.reply_text(
         "🌟 به ربات روزشمار کنکور تجربی ۱۴۰۵ خوش اومدی! 🚀\n"
         "با من هر روز به موفقیت نزدیک‌تر شو و با موزیک‌های جذاب روحیه‌ت رو تازه کن! 💪\n"
@@ -135,7 +154,7 @@ async def countdown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_member, error_message = await check_channel_membership(bot, user_id)
     if not is_member:
         await update.message.reply_text(
-            f"🌟 برای استفاده، عضو کانال @pershiiyan شو! ⭐\n"
+            f"🌟 برای استفاده، عضو کانال {CHANNEL_ID} شو! ⭐\n"
             f"دلیل خطا: {error_message}"
         )
         return
@@ -146,9 +165,9 @@ async def countdown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     hours_left = time_left.seconds // 3600
     minutes_left = (time_left.seconds % 3600) // 60
     seconds_left = time_left.seconds % 60
-    
+
     random_tip = random.choice(TIPS)
-    
+
     if days_left >= 0:
         await update.message.reply_text(
             f"🗓️ **روزشمار کنکور تجربی ۱۴۰۵** 🗓️\n"
@@ -176,7 +195,7 @@ async def tip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_member, error_message = await check_channel_membership(bot, user_id)
     if not is_member:
         await update.message.reply_text(
-            f"🌟 برای استفاده، عضو کانال @pershiiyan شو! ⭐\n"
+            f"🌟 برای استفاده، عضو کانال {CHANNEL_ID} شو! ⭐\n"
             f"دلیل خطا: {error_message}"
         )
         return
@@ -194,21 +213,19 @@ async def music(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_member, error_message = await check_channel_membership(bot, user_id)
     if not is_member:
         await update.message.reply_text(
-            f"🌟 برای استفاده، عضو کانال @pershiiyan شو! ⭐\n"
+            f"🌟 برای استفاده، عضو کانال {CHANNEL_ID} شو! ⭐\n"
             f"دلیل خطا: {error_message}"
         )
         return
 
-    # انتخاب تصادفی یک موزیک
     selected_music = random.choice(MUSIC_FILES)
     try:
-        # ارسال فایل موزیک با file_id
         await update.message.reply_audio(
-            audio=selected_music["file_id"],  # باید file_id واقعی بذاری
+            audio=selected_music["file_id"],
             caption=f"🎵 **موزیک جذاب** 🎵\n{random.choice(['لذت ببر! 🖤', 'روحیه‌ت رو تازه کن! 🚀', 'با این موزیک غرق شو! 💪'])}\n═══════\nساخته شده توسط https://t.me/pershiiyan ⭐"
         )
     except Exception as e:
-        print(f"Error sending music to {user_id}: {e}")
+        logger.exception(f"Error sending music to {user_id}: {e}")
         await update.message.reply_text(
             f"🎵 **موزیک جذاب** 🎵\n"
             f"متاسفانه خطایی پیش اومد! لطفاً دوباره امتحان کن.\n"
@@ -222,7 +239,7 @@ async def set_notification(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_member, error_message = await check_channel_membership(bot, user_id)
     if not is_member:
         await update.message.reply_text(
-            f"🌟 برای استفاده، عضو کانال @pershiiyan شو! ⭐\n"
+            f"🌟 برای استفاده، عضو کانال {CHANNEL_ID} شو! ⭐\n"
             f"دلیل خطا: {error_message}"
         )
         return
@@ -242,13 +259,14 @@ async def set_notification(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    
-    user_id = query.message.chat_id
+
+    # بهتر است برای بررسی عضویت از کاربری که کلیک کرده استفاده کنیم
+    user_id = query.from_user.id
     bot = context.bot
     is_member, error_message = await check_channel_membership(bot, user_id)
     if not is_member:
         await query.message.reply_text(
-            f"🌟 برای استفاده، عضو کانال @pershiiyan شو! ⭐\n"
+            f"🌟 برای استفاده، عضو کانال {CHANNEL_ID} شو! ⭐\n"
             f"دلیل خطا: {error_message}"
         )
         return
@@ -260,9 +278,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         hours_left = time_left.seconds // 3600
         minutes_left = (time_left.seconds % 3600) // 60
         seconds_left = time_left.seconds % 60
-        
+
         random_tip = random.choice(TIPS)
-        
+
         if days_left >= 0:
             await query.message.reply_text(
                 f"🗓️ **روزشمار کنکور تجربی ۱۴۰۵** 🗓️\n"
@@ -283,7 +301,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "🎉 کنکور تجربی ۱۴۰۵ تموم شد! حالا وقت برنامه‌ریزی برای آینده‌ست! 🌟\n"
                 f"ساخته شده توسط https://t.me/pershiiyan ⭐"
             )
-    
+
     elif query.data == "tip":
         random_tip = random.choice(TIPS)
         await query.message.reply_text(
@@ -291,23 +309,23 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"═══════\n"
             f"ساخته شده توسط https://t.me/pershiiyan ⭐"
         )
-    
+
     elif query.data == "music":
         selected_music = random.choice(MUSIC_FILES)
         try:
             await query.message.reply_audio(
-                audio=selected_music["file_id"],  # باید file_id واقعی بذاری
+                audio=selected_music["file_id"],
                 caption=f"🎵 **موزیک جذاب** 🎵\n{random.choice(['لذت ببر! 🖤', 'روحیه‌ت رو تازه کن! 🚀', 'با این موزیک غرق شو! 💪'])}\n═══════\nساخته شده توسط https://t.me/pershiiyan ⭐"
             )
         except Exception as e:
-            print(f"Error sending music to {query.message.chat_id}: {e}")
+            logger.exception(f"Error sending music to {query.message.chat_id}: {e}")
             await query.message.reply_text(
                 f"🎵 **موزیک جذاب** 🎵\n"
                 f"متاسفانه خطایی پیش اومد! لطفاً دوباره امتحان کن.\n"
                 f"═══════\n"
                 f"ساخته شده توسط https://t.me/pershiiyan ⭐"
             )
-    
+
     elif query.data == "set_notification":
         keyboard = [
             [InlineKeyboardButton("🔔 روزانه", callback_data="notify_daily")],
@@ -320,38 +338,53 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🔔 **زمان نوتیفیکیشن رو انتخاب کن:**",
             reply_markup=reply_markup
         )
-    
+
     elif query.data in ["notify_daily", "notify_weekly", "notify_12hour", "notify_off"]:
         frequency = query.data.replace("notify_", "")
+        chat_id = query.message.chat_id
         if frequency == "off":
-            user_notifications[user_id] = []
+            user_notifications[chat_id] = []
             await query.message.reply_text("🔕 نوتیفیکیشن‌ها غیرفعال شد!")
         else:
-            user_notifications[user_id] = [frequency, "weekly", "monthly"]
+            # ساختار ذخیره رو همونطوری که توی کدت بود گذاشتم
+            user_notifications[chat_id] = [frequency, "weekly", "monthly"]
             await query.message.reply_text(
                 f"🔔 نوتیفیکیشن {frequency} فعال شد!\n"
                 f"هفتگی و ماهانه هم خودکار فعال شدن. 🚀"
             )
 
+# --- توابع JobQueue برای ارسال خودکار ---
 async def daily_countdown(context: ContextTypes.DEFAULT_TYPE):
     for chat_id, frequencies in user_notifications.items():
-        if "daily" in frequencies:
-            await send_countdown(context.bot, chat_id)
+        try:
+            if "daily" in frequencies:
+                await send_countdown(context.bot, chat_id)
+        except Exception:
+            logger.exception(f"Failed sending daily countdown to {chat_id}")
 
 async def weekly_countdown(context: ContextTypes.DEFAULT_TYPE):
     for chat_id, frequencies in user_notifications.items():
-        if "weekly" in frequencies:
-            await send_countdown(context.bot, chat_id)
+        try:
+            if "weekly" in frequencies:
+                await send_countdown(context.bot, chat_id)
+        except Exception:
+            logger.exception(f"Failed sending weekly countdown to {chat_id}")
 
 async def twelve_hour_countdown(context: ContextTypes.DEFAULT_TYPE):
     for chat_id, frequencies in user_notifications.items():
-        if "12hour" in frequencies:
-            await send_countdown(context.bot, chat_id)
+        try:
+            if "12hour" in frequencies or "12" in frequencies:
+                await send_countdown(context.bot, chat_id)
+        except Exception:
+            logger.exception(f"Failed sending 12-hour countdown to {chat_id}")
 
 async def monthly_countdown(context: ContextTypes.DEFAULT_TYPE):
     for chat_id, frequencies in user_notifications.items():
-        if "monthly" in frequencies:
-            await send_countdown(context.bot, chat_id)
+        try:
+            if "monthly" in frequencies:
+                await send_countdown(context.bot, chat_id)
+        except Exception:
+            logger.exception(f"Failed sending monthly countdown to {chat_id}")
 
 async def channel_countdown(context: ContextTypes.DEFAULT_TYPE):
     today = datetime.datetime.now()
@@ -360,9 +393,9 @@ async def channel_countdown(context: ContextTypes.DEFAULT_TYPE):
     hours_left = time_left.seconds // 3600
     minutes_left = (time_left.seconds % 3600) // 60
     seconds_left = time_left.seconds % 60
-    
+
     random_tip = random.choice(TIPS)
-    
+
     message = (
         f"🗓️ **روزشمار کنکور تجربی ۱۴۰۵** 🗓️\n"
         f"═══════\n"
@@ -383,8 +416,8 @@ async def channel_countdown(context: ContextTypes.DEFAULT_TYPE):
 
     try:
         await context.bot.send_message(chat_id=CHANNEL_ID, text=message)
-    except Exception as e:
-        print(f"Error sending to channel {CHANNEL_ID}: {e}")
+    except Exception:
+        logger.exception(f"Error sending to channel {CHANNEL_ID}")
 
 async def send_countdown(bot, chat_id):
     is_member, error_message = await check_channel_membership(bot, chat_id)
@@ -392,10 +425,10 @@ async def send_countdown(bot, chat_id):
         try:
             await bot.send_message(
                 chat_id=chat_id,
-                text=f"🌟 برای دریافت نوتیفیکیشن، عضو کانال @pershiiyan شو! ⭐\nدلیل خطا: {error_message}"
+                text=f"🌟 برای دریافت نوتیفیکیشن، عضو کانال {CHANNEL_ID} شو! ⭐\nدلیل خطا: {error_message}"
             )
-        except Exception as e:
-            print(f"Error sending membership warning to {chat_id}: {e}")
+        except Exception:
+            logger.exception(f"Error sending membership warning to {chat_id}")
         return
 
     today = datetime.datetime.now()
@@ -404,9 +437,9 @@ async def send_countdown(bot, chat_id):
     hours_left = time_left.seconds // 3600
     minutes_left = (time_left.seconds % 3600) // 60
     seconds_left = time_left.seconds % 60
-    
+
     random_tip = random.choice(TIPS)
-    
+
     message = (
         f"🗓️ **روزشمار کنکور تجربی ۱۴۰۵** 🗓️\n"
         f"═══════\n"
@@ -427,52 +460,62 @@ async def send_countdown(bot, chat_id):
 
     try:
         await bot.send_message(chat_id=chat_id, text=message)
-    except Exception as e:
-        print(f"Error sending to {chat_id}: {e}")
+    except Exception:
+        logger.exception(f"Error sending to {chat_id}")
 
+# --- main ---
 def main():
-    # راه‌اندازی ربات
     application = Application.builder().token(TOKEN).build()
 
-    # ثبت دستورات
+    # ثبت دستورات و هندلرها
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("countdown", countdown))
     application.add_handler(CommandHandler("tip", tip))
     application.add_handler(CommandHandler("music", music))
     application.add_handler(CallbackQueryHandler(button))
 
-    # نوتیفیکیشن‌ها
+    # JobQueue — توجه: برای run_repeating از interval به صورت timedelta استفاده شده و first = 0 تا
+    # اجرای اول بلافاصله انجام شه (یا می‌تونی first رو به datetime دلخواه تغییر بدی).
     job_queue = application.job_queue
     if job_queue:
+        # نوتیفیکیشن روزانه ساعت 08:00 (ایران)
         job_queue.run_daily(
             daily_countdown,
             time=datetime.time(8, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=3, minutes=30)))
         )
+
+        # هر ۱۲ ساعت (شروع بلافاصله؛ در صورت نیاز می‌تونیم زمان شروع رو حساب کنیم)
         job_queue.run_repeating(
             twelve_hour_countdown,
             interval=datetime.timedelta(hours=12),
-            first=datetime.time(8, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=3, minutes=30)))
+            first=0
         )
+
+        # هفتگی
         job_queue.run_repeating(
             weekly_countdown,
             interval=datetime.timedelta(days=7),
-            first=datetime.time(8, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=3, minutes=30)))
+            first=0
         )
+
+        # ماهانه (تقریبی با 30 روز)
         job_queue.run_repeating(
             monthly_countdown,
             interval=datetime.timedelta(days=30),
-            first=datetime.time(8, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=3, minutes=30)))
+            first=0
         )
+
+        # ارسال به کانال هر ۱۲ ساعت
         job_queue.run_repeating(
             channel_countdown,
             interval=datetime.timedelta(hours=12),
-            first=datetime.time(8, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=3, minutes=30)))
+            first=0
         )
     else:
-        print("JobQueue is not available. Please ensure python-telegram-bot[job-queue] is installed.")
+        logger.warning("JobQueue is not available. Please ensure python-telegram-bot[job-queue] is installed.")
 
     # شروع ربات
-    print("ربات شروع شد...")
+    logger.info("ربات شروع شد...")
     application.run_polling()
 
 if __name__ == "__main__":
