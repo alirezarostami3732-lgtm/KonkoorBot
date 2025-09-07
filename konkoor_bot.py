@@ -432,47 +432,48 @@ async def send_countdown(bot, chat_id):
 
 def main():
     # راه‌اندازی ربات
-    app = Application.builder().token(TOKEN).build()
+    application = Application.builder().token(TOKEN).build()
 
     # ثبت دستورات
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("countdown", countdown))
-    app.add_handler(CommandHandler("tip", tip))
-    app.add_handler(CommandHandler("music", music))
-    app.add_handler(CallbackQueryHandler(button))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("countdown", countdown))
+    application.add_handler(CommandHandler("tip", tip))
+    application.add_handler(CommandHandler("music", music))
+    application.add_handler(CallbackQueryHandler(button))
 
     # نوتیفیکیشن‌ها
-    if app.job_queue is not None:
-        app.job_queue.run_daily(
+    job_queue = application.job_queue
+    if job_queue:
+        job_queue.run_daily(
             daily_countdown,
-            time=datetime.time(8, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
+            time=datetime.time(8, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=3, minutes=30)))
         )
-        app.job_queue.run_repeating(
+        job_queue.run_repeating(
             twelve_hour_countdown,
             interval=datetime.timedelta(hours=12),
-            first=datetime.time(8, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
+            first=datetime.time(8, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=3, minutes=30)))
         )
-        app.job_queue.run_repeating(
+        job_queue.run_repeating(
             weekly_countdown,
             interval=datetime.timedelta(days=7),
-            first=datetime.time(8, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
+            first=datetime.time(8, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=3, minutes=30)))
         )
-        app.job_queue.run_repeating(
+        job_queue.run_repeating(
             monthly_countdown,
             interval=datetime.timedelta(days=30),
-            first=datetime.time(8, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
+            first=datetime.time(8, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=3, minutes=30)))
         )
-        app.job_queue.run_repeating(
+        job_queue.run_repeating(
             channel_countdown,
             interval=datetime.timedelta(hours=12),
-            first=datetime.time(8, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
+            first=datetime.time(8, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=3, minutes=30)))
         )
     else:
-        print("JobQueue is not available. Please install python-telegram-bot with job-queue support.")
+        print("JobQueue is not available. Please ensure python-telegram-bot[job-queue] is installed.")
 
     # شروع ربات
     print("ربات شروع شد...")
-    app.run_polling()
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
